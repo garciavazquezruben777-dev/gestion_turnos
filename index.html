@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Turnos</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+          "firebase/analytics": "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js",
+          "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Menu -->
+        <aside class="sidebar glass-panel">
+            <div class="logo">
+                <i class="fa-solid fa-calendar-days"></i>
+                <h1>TurnosApp</h1>
+                <button class="btn-close mobile-close-btn" id="sidebar-close" style="margin-left: auto; display: none;"><i class="fa-solid fa-times"></i></button>
+            </div>
+            
+            <div class="sidebar-section">
+                <h2>Vistas</h2>
+                <button class="btn w-100 active" style="justify-content: flex-start; margin-bottom: 8px; background: rgba(255,255,255,0.1);" onclick="switchTab('calendar')" id="btn-tab-calendar">
+                    <i class="fa-solid fa-calendar-alt" style="width: 20px;"></i> Calendario
+                </button>
+                <button class="btn w-100" style="justify-content: flex-start;" onclick="switchTab('stats')" id="btn-tab-stats">
+                    <i class="fa-solid fa-chart-bar" style="width: 20px;"></i> Estadísticas
+                </button>
+            </div>
+            
+            <div class="sidebar-section">
+                <h2>Funcionarios</h2>
+                <ul id="worker-list" class="worker-list">
+                    <!-- Workers will be populated here -->
+                </ul>
+            </div>
+
+            <div class="sidebar-section legend">
+                <h2>Leyenda de Turnos</h2>
+                <div class="legend-items">
+                    <div class="legend-item"><span class="badge shift-m">M</span> Mañana (06:00-14:00)</div>
+                    <div class="legend-item"><span class="badge shift-t">T</span> Tarde (14:00-22:00)</div>
+                    <div class="legend-item"><span class="badge shift-n">N</span> Noche (22:00-06:00)</div>
+                    <div class="legend-item"><span class="badge shift-s">S</span> Saliente</div>
+                    <div class="legend-item"><span class="badge shift-l">L</span> Libre</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section legend">
+                <h2>Leyenda de Ausencias</h2>
+                <div class="legend-items">
+                    <div class="legend-item"><span class="badge absence">V</span> Vacaciones</div>
+                    <div class="legend-item"><span class="badge absence">AP</span> Asuntos Particulares</div>
+                    <div class="legend-item"><span class="badge absence">LC</span> Libre Compensación</div>
+                    <div class="legend-item"><span class="badge absence">E</span> Enfermedad</div>
+                    <div class="legend-item"><span class="badge absence">DC</span> Día de Canarias</div>
+                    <div class="legend-item"><span class="badge absence-partial">J</span> Juicios (Horas)</div>
+                </div>
+            </div>
+            
+            <div class="sidebar-section" style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border);">
+                <button class="btn w-100" onclick="logout()" style="background: rgba(239, 68, 68, 0.1); color: #fca5a5; justify-content: center;">
+                    <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="mobile-header">
+                <button class="btn-icon" id="sidebar-toggle"><i class="fa-solid fa-bars"></i></button>
+                <h2 style="font-size: 18px;">TurnosApp</h2>
+            </div>
+            
+            <div id="view-calendar" class="view-section active">
+                <header class="header glass-panel">
+                    <div class="month-navigation">
+                        <button class="btn btn-icon" onclick="prevMonth()"><i class="fa-solid fa-chevron-left"></i></button>
+                        <h2 id="current-month-display">Enero 2024</h2>
+                        <button class="btn btn-icon" onclick="nextMonth()"><i class="fa-solid fa-chevron-right"></i></button>
+                        <button class="btn btn-secondary ms-2" onclick="goToToday()">Hoy</button>
+                    </div>
+                    <div class="header-actions">
+                        <!-- Future actions like export -->
+                    </div>
+                </header>
+
+                <div class="calendar-container glass-panel">
+                    <div class="calendar-header" id="calendar-header">
+                        <!-- Days of month header will go here -->
+                    </div>
+                    <div class="calendar-body" id="calendar-body">
+                        <!-- Workers rows will go here -->
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-stats" class="view-section">
+                <header class="header glass-panel">
+                    <h2>Estadísticas: Saldo de Horas por Funcionario</h2>
+                </header>
+                <div class="glass-panel" style="flex: 1; padding: 24px; display: flex; flex-direction: column;">
+                    <div style="position: relative; height: 100%; width: 100%;">
+                        <canvas id="stats-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Worker Modal -->
+    <div id="worker-modal" class="modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Añadir Funcionario</h3>
+                <button class="btn-close" onclick="closeWorkerModal()"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="worker-form">
+                    <div class="form-group">
+                        <label for="worker-name">Nombre del Funcionario</label>
+                        <input type="text" id="worker-name" required placeholder="Ej. Juan Pérez">
+                    </div>
+                    <div class="form-group">
+                        <label for="worker-start-date">Primer día del ciclo (Primera Mañana)</label>
+                        <input type="date" id="worker-start-date" required>
+                    </div>
+                    <div class="form-group" style="margin-top: 16px;">
+                        <label>Días Disponibles para el Año Actual</label>
+                        <div style="display:flex; gap:12px; margin-top:8px;">
+                            <div style="flex:1">
+                                <small class="text-muted">Vacaciones</small>
+                                <input type="number" id="worker-v" required value="22" min="0" style="width:100%; margin-top:4px;">
+                            </div>
+                            <div style="flex:1">
+                                <small class="text-muted">A.P.</small>
+                                <input type="number" id="worker-ap" required value="6" min="0" style="width:100%; margin-top:4px;">
+                            </div>
+                            <div style="flex:1">
+                                <small class="text-muted">D. Canarias</small>
+                                <input type="number" id="worker-dc" required value="1" min="0" style="width:100%; margin-top:4px;">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeWorkerModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Leave Modal -->
+    <div id="leave-modal" class="modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Modificar Turno</h3>
+                <button class="btn-close" onclick="closeLeaveModal()"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="leave-modal-info" class="mb-2 text-muted"></p>
+                <form id="leave-form">
+                    <input type="hidden" id="leave-worker-id">
+                    <input type="hidden" id="leave-date">
+                    <input type="hidden" id="leave-shift">
+                    
+                    <div class="form-group">
+                        <label for="leave-type">Tipo de Ausencia</label>
+                        <select id="leave-type" onchange="toggleHoursField()">
+                            <option value="">-- Turno Normal --</option>
+                            <option value="V">Vacaciones (V)</option>
+                            <option value="AP">Asuntos Particulares (AP)</option>
+                            <option value="LC">Libre Compensación (LC)</option>
+                            <option value="E">Enfermedad (E)</option>
+                            <option value="DC">Día de Canarias (DC)</option>
+                            <option value="J">Juicios (J)</option>
+                            <option value="NONE">Turno Normal / Limpiar Ausencias</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="hours-group" style="display: none;">
+                        <label for="leave-hours">Horas Utilizadas (para Juicios)</label>
+                        <input type="number" id="leave-hours" min="1" max="8" value="8">
+                        <small class="text-muted">Si utilizas 8 horas, se coge el turno entero.</small>
+                    </div>
+                    
+                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 24px 0 16px 0;">
+                    <h4 style="margin-bottom: 16px; font-size: 14px; color: var(--text-secondary);">Ajustes de Horario (En minutos)</h4>
+                    
+                    <div class="form-group">
+                        <label for="extra-time">Hora real de salida (Salida tardía +)</label>
+                        <input type="time" id="extra-time">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="minus-time">Hora real de salida (Salida anticipada -)</label>
+                        <input type="time" id="minus-time">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeLeaveModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Balance Config Modal -->
+    <div id="balance-modal" class="modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Configurar Nuevo Año</h3>
+                <button class="btn-close" onclick="closeBalanceModal()"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="balance-modal-info" class="mb-2 text-muted" style="font-size:14px;"></p>
+                <form id="balance-form">
+                    <input type="hidden" id="balance-worker-id">
+                    <input type="hidden" id="balance-year">
+                    
+                    <div class="form-group">
+                        <label>Introduce los días totales para el año <strong id="balance-year-display"></strong></label>
+                        <div style="display:flex; gap:12px; margin-top:8px;">
+                            <div style="flex:1">
+                                <small class="text-muted">Vacaciones</small>
+                                <input type="number" id="balance-v" required min="0" style="width:100%; margin-top:4px;">
+                            </div>
+                            <div style="flex:1">
+                                <small class="text-muted">A.P.</small>
+                                <input type="number" id="balance-ap" required min="0" style="width:100%; margin-top:4px;">
+                            </div>
+                            <div style="flex:1">
+                                <small class="text-muted">D. Canarias</small>
+                                <input type="number" id="balance-dc" required min="0" style="width:100%; margin-top:4px;">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeBalanceModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info/Resumen Modal -->
+    <div id="info-modal" class="modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Resumen Anual</h3>
+                <button class="btn-close" onclick="closeInfoModal()"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="info-modal-content" style="font-size:14px; line-height:1.6;"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-primary" onclick="closeInfoModal()">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal Overlay -->
+    <div id="auth-screen" class="modal active" style="background: var(--bg-primary);">
+        <div class="modal-content glass-panel" style="text-align: center;">
+            <i class="fa-solid fa-calendar-days" style="font-size: 3rem; color: var(--shift-t); margin-bottom: 1rem;"></i>
+            <h2 id="auth-title">Iniciar Sesión</h2>
+            <p class="text-muted mb-2">Accede para ver y gestionar tus turnos.</p>
+            <form id="auth-form">
+                <div class="form-group" style="text-align: left;">
+                    <label>Email</label>
+                    <input type="email" id="auth-email" required>
+                </div>
+                <div class="form-group" style="text-align: left;">
+                    <label>Contraseña</label>
+                    <input type="password" id="auth-password" required minlength="6">
+                </div>
+                <div id="auth-error" style="color: var(--absence); font-size: 13px; margin-bottom: 10px; font-weight: bold;"></div>
+                <button type="submit" class="btn btn-primary w-100" id="auth-submit-btn">Entrar</button>
+            </form>
+            <p style="margin-top: 1rem; font-size: 14px;">
+                <a href="#" id="auth-toggle-link" onclick="toggleAuthMode(event)" style="color: var(--shift-t); text-decoration: none;">¿No tienes cuenta? Regístrate</a>
+            </p>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
